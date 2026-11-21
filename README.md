@@ -77,5 +77,29 @@ npm run dev
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
 
+## 质量观测口径与刷新稳定性
+
+重复率依赖疑似重复簇、匹配精度依赖匹配任务统计，两个数据源在同一运行中
+到达节奏不同（任务统计先到、簇数据可能迟到）。为避免治理看板刷新时混入
+不同范围的数据，质量统计按「运行口径」组织：
+
+- `app/services/quality_snapshot.py` 登记每次运行确定的参加模型、输入范围、
+  执行范围与输入指纹，并分别记录两个数据源的到达时间，区分两个指标的可用时间。
+- `auto_match_job` 支持两阶段发布：`register_match_run`（任务统计先落库）与
+  `publish_cluster_data`（簇数据迟到后落库）；`schedule_match_job` 仍是同步封装。
+- `mdm_quality` 只引用本运行注册的数据源记录，缺数据源的指标显示「待数据源」、
+  快照保持「计算中」，不覆盖历史已确认结果；每个指标保存分子、分母、实际范围
+  与来源记录引用，可经 `trace_snapshot` 按统计编号回查。
+- `mdm_dashboard` 只对口径完整的测量发出可处理的复核结论；口径待齐时提示等待
+  的数据源，并保留上一次完整口径的复核留痕。
+
+后端测试（无需 pytest，直接运行）：
+
+```bash
+cd backend
+.venv/bin/python app/tests/test_business_chains.py            # 6 条业务链路
+.venv/bin/python app/tests/test_quality_snapshot_stability.py # 口径与刷新稳定性
+```
+
 领域：数据工程
 子方向：数仓与数据湖
